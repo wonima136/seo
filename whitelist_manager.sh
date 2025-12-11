@@ -7,7 +7,10 @@
 #   3. 只允许指定IP访问，其他全部拒绝
 #   4. 提供查看、保存、恢复、清除等管理功能
 #
-# 用法: chmod +x whitelist_manager.sh && sudo ./whitelist_manager.sh
+# 用法:
+#   交互模式: sudo ./whitelist_manager.sh
+#   全自动模式: sudo ./whitelist_manager.sh --auto
+#              (清空规则 -> 下载IP -> 配置白名单 -> 保存，无需确认)
 ################################################################################
 
 RED='\033[0;31m'
@@ -516,7 +519,58 @@ show_menu() {
     echo "────────────────────────────────────────────────"
 }
 
-# 主流程
+# 全自动流程（无需交互）
+auto_process() {
+    print_header "IP白名单全自动配置"
+    
+    # 检测当前IP
+    detect_current_ip
+    if [ -n "$CURRENT_USER_IP" ]; then
+        print_success "检测到当前SSH连接IP: $CURRENT_USER_IP"
+        print_info "将自动添加其C段到白名单"
+    else
+        print_warning "未检测到SSH连接IP"
+    fi
+    
+    # 获取百度IP
+    echo ""
+    if [ "$ENABLE_BAIDU_WHITELIST" = "true" ]; then
+        fetch_baidu_ips
+    else
+        print_warning "百度白名单功能已禁用"
+    fi
+    
+    # 显示预览
+    echo ""
+    show_whitelist_preview
+    
+    # 自动执行
+    echo ""
+    echo "────────────────────────────────────────────────"
+    print_info "全自动模式：3秒后开始配置..."
+    echo "────────────────────────────────────────────────"
+    sleep 3
+    
+    # 应用规则
+    apply_iptables_rules
+    
+    # 自动保存规则
+    echo ""
+    save_iptables_rules
+    
+    # 显示结果
+    echo ""
+    view_current_rules
+    
+    # 完成
+    echo ""
+    print_header "配置完成"
+    print_success "白名单规则已生效并已保存！"
+    echo ""
+    print_info "备份文件位置: $BACKUP_DIR"
+}
+
+# 主流程（交互式）
 main_process() {
     print_header "IP白名单配置向导"
     
@@ -623,17 +677,9 @@ trap cleanup EXIT
 # 检查root权限
 check_root
 
-# 如果有命令行参数，直接执行主流程
+# 如果有命令行参数，执行全自动流程
 if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
-    detect_current_ip
-    fetch_baidu_ips
-    show_whitelist_preview
-    echo ""
-    print_warning "自动模式：将在5秒后自动应用规则..."
-    sleep 5
-    apply_iptables_rules
-    save_iptables_rules
-    view_current_rules
+    auto_process
     exit 0
 fi
 
